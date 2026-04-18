@@ -85,7 +85,7 @@ export default function Home() {
       const interval = setInterval(() => {
         fetchMessages();
         fetchRecentChats();
-      }, 3000);
+      }, 10000); // Reduced polling: every 10s
       fetchMessages();
       fetchRecentChats();
       return () => clearInterval(interval);
@@ -102,7 +102,7 @@ export default function Home() {
         body: JSON.stringify({ userId: user.id }),
       }).catch(() => {});
     ping(); // immediate first ping
-    const id = setInterval(ping, 30_000);
+    const id = setInterval(ping, 90_000); // Reduced self-ping: 90s
     return () => clearInterval(id);
   }, [user]);
 
@@ -119,7 +119,7 @@ export default function Home() {
       } catch { /* ignore */ }
     };
     check();
-    const id = setInterval(check, 10_000);
+    const id = setInterval(check, 45_000); // Reduced other-presence: 45s
     return () => clearInterval(id);
   }, [chattingWith]);
 
@@ -140,7 +140,7 @@ export default function Home() {
       } catch { /* ignore */ }
     };
     poll();
-    const id = setInterval(poll, 2500);
+    const id = setInterval(poll, 15_000); // Reduced call poll: 15s
     return () => clearInterval(id);
   }, [user, callStatus]);
 
@@ -280,15 +280,26 @@ export default function Home() {
     const file = e.target.files[0];
     if (!file || !chattingWith) return;
 
-    const formData = new FormData();
-    formData.append('senderId', user.id);
-    formData.append('receiverId', chattingWith.id);
-    formData.append('type', 'image');
-    formData.append('file', file);
-    try {
-      await fetch('/api/messages', { method: 'POST', body: formData });
-      fetchMessages();
-    } catch (err) { alert('Upload failed'); }
+    // Convert to Base64 for easier processing on Vercel
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64String = reader.result;
+      try {
+        await fetch('/api/messages', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderId: user.id,
+            receiverId: chattingWith.id,
+            type: 'image',
+            file: base64String // Send as Base64 string
+          }) 
+        });
+        fetchMessages();
+      } catch (err) { alert('Upload failed'); }
+    };
+    reader.onerror = () => alert('Failed to read image file');
+    reader.readAsDataURL(file);
   };
 
 

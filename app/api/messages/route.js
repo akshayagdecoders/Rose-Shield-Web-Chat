@@ -5,14 +5,27 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request) {
   try {
-    const formData = await request.formData();
-    const senderId = formData.get('senderId');
-    const receiverId = formData.get('receiverId');
-    const type = formData.get('type') || 'text'; // 'text' or 'image'
+    const contentType = request.headers.get('content-type') || '';
+    let senderId, receiverId, type, content, originalContent, fileData;
     
-    let content = formData.get('content');
+    if (contentType.includes('application/json')) {
+      const body = await request.json();
+      senderId = body.senderId;
+      receiverId = body.receiverId;
+      type = body.type || 'text';
+      content = body.content || '';
+      fileData = body.file; // This might be a Base64 string
+    } else {
+      const formData = await request.formData();
+      senderId = formData.get('senderId');
+      receiverId = formData.get('receiverId');
+      type = formData.get('type') || 'text';
+      content = formData.get('content');
+      fileData = formData.get('file'); // This is a File object
+    }
+    
     let isOffensive = false;
-    let originalContent = content;
+    originalContent = content;
 
     if (type === 'text') {
       // Server-side AI + Keyword check
@@ -22,14 +35,28 @@ export async function POST(request) {
         content = "the message is unavailable";
       }
     } else if (type === 'image') {
-      const file = formData.get('file');
-      if (!file) {
-        return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
+      if (!fileData) {
+        return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+      }
+
+      let buffer;
+      let filename = 'upload.jpg';
+      let mimeType = 'image/jpeg';
+
+      if (typeof fileData === 'string' && fileData.startsWith('data:')) {
+        // Handle Base64
+        const parts = fileData.split(';base64,');
+        mimeType = parts[0].split(':')[1];
+        buffer = Buffer.from(parts[1], 'base64');
+      } else {
+        // Handle File object (FormData)
+        const arrayBuffer = await fileData.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+        filename = fileData.name || 'upload.jpg';
+        mimeType = fileData.type || 'image/jpeg';
       }
 
       // 1. Server-side Image AI check
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
       isOffensive = await checkImage(buffer);
 
       if (isOffensive) {
@@ -38,7 +65,8 @@ export async function POST(request) {
       } else {
         // 2. Upload to external Hostinger server if safe
         const uploadFormData = new FormData();
-        uploadFormData.append('image', file);
+        const blob = new Blob([buffer], { type: mimeType });
+        uploadFormData.append('image', blob, filename);
 
         const uploadRes = await fetch('https://lightgoldenrodyellow-deer-492936.hostingersite.com/upload.php', {
             method: 'POST',
