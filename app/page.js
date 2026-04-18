@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { scanTextLocally, initClientDetector } from '@/lib/clientDetector';
-import { scanImageLocally, initClientImageDetector } from '@/lib/clientImageDetector';
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -44,24 +42,6 @@ export default function Home() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [learnedWords, setLearnedWords] = useState([]);
-  const [isAiReady, setIsAiReady] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-
-  useEffect(() => {
-    const initAI = async () => {
-      try {
-        await Promise.all([
-          initClientDetector(),
-          initClientImageDetector()
-        ]);
-        setIsAiReady(true);
-        console.log('RoseShield AI Systems Online');
-      } catch (err) {
-        console.error('AI Init failed:', err);
-      }
-    };
-    initAI();
-  }, []);
 
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
@@ -283,11 +263,6 @@ export default function Home() {
     e.preventDefault();
     if (!newMessage.trim() || !chattingWith) return;
 
-    setIsScanning(true);
-    const textScore = await scanTextLocally(newMessage);
-    setIsScanning(false);
-
-    const isOffensive = textScore > 0.85;
     const content = newMessage;
     setNewMessage('');
     const formData = new FormData();
@@ -295,7 +270,6 @@ export default function Home() {
     formData.append('receiverId', chattingWith.id);
     formData.append('type', 'text');
     formData.append('content', content);
-    formData.append('isOffensive', isOffensive ? 'true' : 'false');
     try {
       await fetch('/api/messages', { method: 'POST', body: formData });
       fetchMessages();
@@ -306,22 +280,17 @@ export default function Home() {
     const file = e.target.files[0];
     if (!file || !chattingWith) return;
 
-    setIsScanning(true);
-    const imageResult = await scanImageLocally(file);
-    setIsScanning(false);
-
-    const isOffensive = imageResult.isSensitive;
     const formData = new FormData();
     formData.append('senderId', user.id);
     formData.append('receiverId', chattingWith.id);
     formData.append('type', 'image');
     formData.append('file', file);
-    formData.append('isOffensive', isOffensive ? 'true' : 'false');
     try {
       await fetch('/api/messages', { method: 'POST', body: formData });
       fetchMessages();
     } catch (err) { alert('Upload failed'); }
   };
+
 
   const handleReportMessage = async (msg) => {
     if (!user.is_admin) return;

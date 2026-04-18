@@ -1,5 +1,6 @@
 import pool from '@/lib/db';
 import { checkMessage } from '@/lib/detector';
+import { checkImage } from '@/lib/imageDetector';
 import { NextResponse } from 'next/server';
 
 export async function POST(request) {
@@ -10,13 +11,12 @@ export async function POST(request) {
     const type = formData.get('type') || 'text'; // 'text' or 'image'
     
     let content = formData.get('content');
-    let clientIsOffensive = formData.get('isOffensive') === 'true';
-    let isOffensive = clientIsOffensive;
+    let isOffensive = false;
     let originalContent = content;
 
     if (type === 'text') {
-      // Backend double-check using keyword/pattern engine (Vercel-safe)
-      isOffensive = (await checkMessage(content)) || clientIsOffensive;
+      // Server-side AI + Keyword check
+      isOffensive = await checkMessage(content);
       if (isOffensive) {
         originalContent = content;
         content = "the message is unavailable";
@@ -27,32 +27,38 @@ export async function POST(request) {
         return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
       }
 
-      // Note: Image moderation is handled client-side for Vercel compatibility.
-      // We trust the client-side scan for real-time blocking, 
-      // and we could add an asynchronous background job for secondary server-side check.
+      // 1. Server-side Image AI check
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      isOffensive = await checkImage(buffer);
 
-      // Upload to external Hostinger server
-      const uploadFormData = new FormData();
-      uploadFormData.append('image', file);
+      if (isOffensive) {
+        originalContent = "Sensitive Image Blocked";
+        content = "the message is unavailable";
+      } else {
+        // 2. Upload to external Hostinger server if safe
+        const uploadFormData = new FormData();
+        uploadFormData.append('image', file);
 
-      const uploadRes = await fetch('https://lightgoldenrodyellow-deer-492936.hostingersite.com/upload.php', {
-          method: 'POST',
-          body: uploadFormData
-      });
+        const uploadRes = await fetch('https://lightgoldenrodyellow-deer-492936.hostingersite.com/upload.php', {
+            method: 'POST',
+            body: uploadFormData
+        });
 
-      if (!uploadRes.ok) {
-          throw new Error("Failed to upload image to Hostinger external server");
+        if (!uploadRes.ok) {
+            throw new Error("Failed to upload image to Hostinger external server");
+        }
+
+        const uploadData = await uploadRes.json();
+        const fileUrl = uploadData.file_url;
+
+        if (!fileUrl) {
+            return NextResponse.json({ error: "Hostinger upload failed: No URL returned" }, { status: 500 });
+        }
+
+        originalContent = fileUrl;
+        content = fileUrl;
       }
-
-      const uploadData = await uploadRes.json();
-      const fileUrl = uploadData.file_url;
-
-      if (!fileUrl) {
-          return NextResponse.json({ error: "Hostinger upload failed: No URL returned" }, { status: 500 });
-      }
-
-      originalContent = fileUrl;
-      content = fileUrl;
     }
 
     const [result] = await pool.execute(
@@ -64,8 +70,8 @@ export async function POST(request) {
         id: Number(result.insertId), 
         senderId, 
         receiverId, 
-        content: isOffensive ? "the message is unavailable" : content,
-        originalContent: isOffensive ? originalContent : content,
+        content,
+        originalContent,
         isOffensive,
         type,
         timestamp: new Date()
@@ -85,7 +91,6 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Both user IDs are required' }, { status: 400 });
   }
 
-  console.log(`Fetching messages between ${user1} and ${user2}`);
   const u1 = parseInt(user1);
   const u2 = parseInt(user2);
 
@@ -123,7 +128,7 @@ export async function GET(request) {
 
     // Logic: If is_offensive is true, hide content from receiver
     const sanitizedRows = rows.map(row => {
-      const isRecipient = row.receiver_id === user1; // Assuming user1 is the one fetching
+      const isRecipient = Number(row.receiver_id) === u1;
       if (row.is_offensive && isRecipient) {
         return {
           ...row,
@@ -134,7 +139,6 @@ export async function GET(request) {
       return row;
     });
 
-    // Ensure results are JSON serializable (mysql2 might return BigInt)
     const sanitizedResponse = JSON.parse(JSON.stringify(sanitizedRows, (key, value) =>
       typeof value === 'bigint' ? value.toString() : value
     ));
@@ -144,3 +148,4 @@ export async function GET(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

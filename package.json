@@ -13,9 +13,11 @@
     "formidable": "^3.5.4",
     "mysql2": "^3.22.1",
     "next": "16.2.4",
+    "onnxruntime-node": "^1.24.3",
     "onnxruntime-web": "^1.24.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "sharp": "^0.34.5",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
