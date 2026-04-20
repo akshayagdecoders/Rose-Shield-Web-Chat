@@ -59,18 +59,20 @@ export default function Home() {
   const callPollRef = useRef(null);
 
   useEffect(() => {
-    fetch('/api/db-init').then(() => setIsInitializing(false));
+    setIsInitializing(false); // No longer need to fetch /api/db-init every time
     const savedUser = localStorage.getItem('chat_user');
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
-      // Re-sync from server to get latest is_admin status
+      // Re-sync from server sparingly or only on demand
       syncUserProfile(parsed.id);
     }
   }, []);
 
   const syncUserProfile = async (userId) => {
     try {
+      // Only fetch profile if user is logged in
+      if (!userId) return;
       const res = await fetch(`/api/users/profile?userId=${userId}`);
       if (res.ok) {
         const freshUser = await res.json();
@@ -82,67 +84,55 @@ export default function Home() {
 
   useEffect(() => {
     if (user) {
-      const interval = setInterval(() => {
-        fetchMessages();
-        fetchRecentChats();
-      }, 10000); // Reduced polling: every 10s
-      fetchMessages();
-      fetchRecentChats();
-      return () => clearInterval(interval);
+      const sync = async () => {
+        if (document.hidden) return;
+        try {
+          const url = `/api/sync?userId=${user.id}${chattingWith ? `&chattingWithId=${chattingWith.id}` : ''}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            setRecentChats(data.chats || []);
+            if (chattingWith && data.messages) {
+              setMessages(data.messages);
+            }
+            if (chattingWith && data.presence) {
+               setOtherUserOnline(data.presence.online);
+            } else if (!chattingWith) {
+               setOtherUserOnline(null);
+            }
+            if (data.incomingCall && callStatus === 'idle') {
+              setIncomingCall(data.incomingCall);
+            } else if (!data.incomingCall) {
+              setIncomingCall(null);
+            }
+          }
+        } catch (err) {
+          console.error('Sync error:', err);
+        }
+      };
+
+      // Initial sync
+      sync();
+      
+      // Heartbeat (Presence POST) - runs every 90s
+      const pingId = setInterval(() => {
+        if (document.hidden) return;
+        fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id }),
+        }).catch(() => {});
+      }, 90000);
+
+      // Main Sync - runs every 30s
+      const syncId = setInterval(sync, 30000);
+
+      return () => {
+        clearInterval(pingId);
+        clearInterval(syncId);
+      };
     }
-  }, [user, chattingWith]);
-
-  // ── Self heartbeat: keep our own last_seen fresh every 30s ──
-  useEffect(() => {
-    if (!user) return;
-    const ping = () =>
-      fetch('/api/presence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
-      }).catch(() => {});
-    ping(); // immediate first ping
-    const id = setInterval(ping, 90_000); // Reduced self-ping: 90s
-    return () => clearInterval(id);
-  }, [user]);
-
-  // ── Other user presence: poll every 10s while a chat is open ──
-  useEffect(() => {
-    if (!chattingWith) { setOtherUserOnline(null); return; }
-    const check = async () => {
-      try {
-        const res = await fetch(`/api/presence?userId=${chattingWith.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setOtherUserOnline(data.online);
-        }
-      } catch { /* ignore */ }
-    };
-    check();
-    const id = setInterval(check, 45_000); // Reduced other-presence: 45s
-    return () => clearInterval(id);
-  }, [chattingWith]);
-
-  // ── Incoming call poll (every 2.5s) ──
-  useEffect(() => {
-    if (!user) return;
-    const poll = async () => {
-      if (callStatus !== 'idle') return; // don't show new incoming if already in call
-      try {
-        const res = await fetch(`/api/calls?userId=${user.id}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data && data.id) {
-          setIncomingCall(data);
-        } else {
-          setIncomingCall(null);
-        }
-      } catch { /* ignore */ }
-    };
-    poll();
-    const id = setInterval(poll, 15_000); // Reduced call poll: 15s
-    return () => clearInterval(id);
-  }, [user, callStatus]);
+  }, [user, chattingWith, callStatus]);
 
   // ── Call history ──
   useEffect(() => {
