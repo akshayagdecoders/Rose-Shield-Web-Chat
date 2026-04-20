@@ -60,7 +60,8 @@ export async function POST(request) {
       isOffensive = await checkImage(buffer);
 
       if (isOffensive) {
-        originalContent = "Sensitive Image Blocked";
+        // Preserving original image data in original_content for AI training/audit
+        originalContent = typeof fileData === 'string' ? fileData : `data:${mimeType};base64,${buffer.toString('base64')}`;
         content = "the message is unavailable";
       } else {
         // 2. Upload to external Hostinger server if safe
