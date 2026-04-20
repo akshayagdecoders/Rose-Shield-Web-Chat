@@ -42,6 +42,7 @@ export default function Home() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [learnedWords, setLearnedWords] = useState([]);
+  const [isScanning, setIsScanning] = useState(false); // Global AI Scanning state
 
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
@@ -275,7 +276,8 @@ export default function Home() {
     reader.onload = async () => {
       const base64String = reader.result;
       try {
-        await fetch('/api/messages', { 
+        setIsScanning(true);
+        const res = await fetch('/api/messages', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -285,8 +287,17 @@ export default function Home() {
             file: base64String // Send as Base64 string
           }) 
         });
-        fetchMessages();
-      } catch (err) { alert('Upload failed'); }
+        setIsScanning(false);
+        if (res.ok) {
+           fetchMessages();
+        } else {
+           const d = await res.json();
+           alert(d.error || 'Upload failed');
+        }
+      } catch (err) { 
+        setIsScanning(false);
+        alert('Upload failed'); 
+      }
     };
     reader.onerror = () => alert('Failed to read image file');
     reader.readAsDataURL(file);
@@ -1050,6 +1061,11 @@ export default function Home() {
                     ) : (
                       <><span className="presence-dot presence-dot--offline" /><span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:'500'}}>Offline</span></>
                     )}
+                    <div style={{width:'1px', height:'10px', background:'var(--border)', margin:'0 4px'}} />
+                    <div style={{display:'flex', alignItems:'center', gap:'4px'}} title="RoseShield Cloud AI engine is active">
+                      <svg style={{width:'10px', height:'10px', color:'var(--primary)'}} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                      <span style={{fontSize:'0.65rem', color:'var(--primary)', fontWeight:'bold', letterSpacing:'0.02em'}}>SHIELD LIVE</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1194,6 +1210,19 @@ export default function Home() {
                 );
               })}
               <div ref={messagesEndRef} />
+              
+              {/* Dynamic Scanning Overlay */}
+              {isScanning && (
+                <div style={{
+                  position: 'sticky', bottom: '10px', left: '50%', transform: 'translateX(-50%)',
+                  background: 'rgba(17,27,33,0.9)', backdropFilter: 'blur(10px)', border: '1px solid var(--primary)',
+                  padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px',
+                  zIndex: 20, boxShadow: '0 4px 15px rgba(0,0,0,0.4)', color: 'var(--primary)'
+                }}>
+                  <div className="scanning-spinner" />
+                  <span style={{fontSize: '0.85rem', fontWeight: 'bold'}}>RoseShield Scanning...</span>
+                </div>
+              )}
             </div>
 
             {/* Floating Go Down Button with Badge overlay on top of messages area */}

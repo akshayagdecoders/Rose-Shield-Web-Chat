@@ -662,3 +662,25 @@ body {
   gap: 24px;
   margin-top: 4px;
 }
+
+/* ── RoseShield Scanning UI ───────────────────────── */
+.scanning-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 168, 132, 0.3);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.scroll-to-bottom-btn {
+  transition: transform 0.2s, background 0.2s;
+}
+.scroll-to-bottom-btn:hover {
+  transform: translateY(-2px);
+  background: var(--panel-hover) !important;
+}
