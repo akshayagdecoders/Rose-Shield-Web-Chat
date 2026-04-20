@@ -1211,16 +1211,20 @@ export default function Home() {
               })}
               <div ref={messagesEndRef} />
               
-              {/* Dynamic Scanning Overlay */}
+              {/* Discreet Image Loader */}
               {isScanning && (
                 <div style={{
-                  position: 'sticky', bottom: '10px', left: '50%', transform: 'translateX(-50%)',
-                  background: 'rgba(17,27,33,0.9)', backdropFilter: 'blur(10px)', border: '1px solid var(--primary)',
-                  padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px',
-                  zIndex: 20, boxShadow: '0 4px 15px rgba(0,0,0,0.4)', color: 'var(--primary)'
+                  position: 'sticky', bottom: '10px', left: '0', right: '0',
+                  display: 'flex', justifyContent: 'center', zIndex: 30, pointerEvents: 'none'
                 }}>
-                  <div className="scanning-spinner" />
-                  <span style={{fontSize: '0.85rem', fontWeight: 'bold'}}>RoseShield Scanning...</span>
+                  <div style={{
+                    background: 'var(--panel-bg)', padding: '8px 16px', borderRadius: '20px',
+                    display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid var(--border)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
+                  }}>
+                    <div className="scanning-spinner" style={{width: '18px', height: '18px'}} />
+                    <span style={{fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '500'}}>Processing...</span>
+                  </div>
                 </div>
               )}
             </div>
