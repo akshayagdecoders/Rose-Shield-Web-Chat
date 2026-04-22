@@ -43,6 +43,7 @@ export default function Home() {
   const [callDuration, setCallDuration] = useState(0);
   const [learnedWords, setLearnedWords] = useState([]);
   const [isScanning, setIsScanning] = useState(false); // Global AI Scanning state
+  const [deliveryLatencies, setDeliveryLatencies] = useState({}); // { msgId: latencySeconds }
 
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
@@ -94,6 +95,22 @@ export default function Home() {
             const data = await res.json();
             setRecentChats(data.chats || []);
             if (chattingWith && data.messages) {
+              // Calculate Time to Recipient for new messages
+              const newMsgs = data.messages.filter(m => !messages.some(prev => prev.id === m.id));
+              if (newMsgs.length > 0) {
+                const newLatencies = { ...deliveryLatencies };
+                let latenciesUpdated = false;
+                newMsgs.forEach(msg => {
+                  if (Number(msg.sender_id) !== user.id && !newLatencies[msg.id]) {
+                      const sentTime = new Date(msg.timestamp).getTime();
+                      const latency = (Date.now() - sentTime) / 1000;
+                      newLatencies[msg.id] = latency;
+                      latenciesUpdated = true;
+                      console.log(`[PERF] Latency for Msg ${msg.id}: ${latency.toFixed(2)}s`);
+                  }
+                });
+                if (latenciesUpdated) setDeliveryLatencies(newLatencies);
+              }
               setMessages(data.messages);
             }
             if (chattingWith && data.presence) {
@@ -261,8 +278,11 @@ export default function Home() {
     formData.append('receiverId', chattingWith.id);
     formData.append('type', 'text');
     formData.append('content', content);
+    const sendStart = performance.now();
     try {
       await fetch('/api/messages', { method: 'POST', body: formData });
+      const sendTime = performance.now() - sendStart;
+      console.log(`[PERF] Text Send Time (Client -> Server -> Client): ${sendTime.toFixed(2)}ms`);
       fetchMessages();
     } catch (err) { alert('Send failed'); }
   };
@@ -277,6 +297,7 @@ export default function Home() {
       const base64String = reader.result;
       try {
         setIsScanning(true);
+        const sendStart = performance.now();
         const res = await fetch('/api/messages', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
@@ -287,6 +308,8 @@ export default function Home() {
             file: base64String // Send as Base64 string
           }) 
         });
+        const sendTime = performance.now() - sendStart;
+        console.log(`[PERF] Image Send Time (Client -> Server -> Client): ${sendTime.toFixed(2)}ms`);
         setIsScanning(false);
         if (res.ok) {
            fetchMessages();
